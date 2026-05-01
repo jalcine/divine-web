@@ -2,11 +2,13 @@ import React, { useEffect, useRef } from 'react';
 import { NostrEvent, NostrFilter, NPool, NRelay1 } from '@nostrify/nostrify';
 import { BADGE_RELAYS } from '@/config/relays';
 import { NostrContext } from '@nostrify/react';
+import { WebsocketEvent } from 'websocket-ts';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAppContext } from '@/hooks/useAppContext';
 import { debugLog, verboseLog } from '@/lib/debug';
 import { createCachedNostr } from '@/lib/cachedNostr';
 import { PROFILE_RELAYS, getRelayUrls } from '@/config/relays';
+import { relayMetrics } from '@/lib/relayMetrics';
 
 interface NostrProviderProps {
   children: React.ReactNode;
@@ -70,6 +72,9 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
           // Disabled to reduce console noise - enable for debugging relay issues
           // log: (log) => verboseLog(`[NRelay1:${log.ns}]`, log),
         });
+        relay.socket.addEventListener(WebsocketEvent.open, () => relayMetrics.setState(url, 'connected'));
+        relay.socket.addEventListener(WebsocketEvent.close, () => relayMetrics.setState(url, 'disconnected'));
+        relay.socket.addEventListener(WebsocketEvent.error, () => relayMetrics.setState(url, 'error'));
         verboseLog('[NostrProvider] NRelay1 instance created, readyState:', relay.socket?.readyState);
         return relay;
       },

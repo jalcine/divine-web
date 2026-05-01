@@ -12,6 +12,7 @@ import type { NIP50Filter, SortMode } from '@/types/nostr';
 import { parseVideoEvents } from '@/lib/videoParser';
 import { debugLog } from '@/lib/debug';
 import { performanceMonitor } from '@/lib/performanceMonitoring';
+import { useEffect } from 'react';
 
 interface UseInfiniteVideosOptions {
   feedType: 'discovery' | 'home' | 'trending' | 'hashtag' | 'profile' | 'recent';
@@ -28,6 +29,11 @@ interface VideoPage {
   // For offset-based pagination with sorted feeds
   offset?: number;
 }
+
+const SESSION_KEY_PREFIX = 'divine:video-page:';
+
+function cachePageData(key: string, data: VideoPage) { try { sessionStorage.setItem(SESSION_KEY_PREFIX + key, JSON.stringify(data)); } catch {} }
+function getCachedPageData(key: string): VideoPage | null { try { const stored = sessionStorage.getItem(SESSION_KEY_PREFIX + key); return stored ? JSON.parse(stored) : null; } catch { return null; } }
 
 /**
  * Infinite scroll hook for video feeds
@@ -61,7 +67,7 @@ export function useInfiniteVideos({
     debugLog(`[useInfiniteVideos] Relay doesn't support video sorting, will use chronological order instead of sort:${requestedSortMode}`);
   }
 
-  return useInfiniteQuery<VideoPage, Error>({
+  const queryResult = useInfiniteQuery<VideoPage, Error>({
     queryKey: ['infinite-videos', feedType, hashtag, pubkey, requestedSortMode, effectiveSortMode, pageSize],
     queryFn: async ({ pageParam, signal }) => {
       const totalStart = performance.now();
@@ -71,6 +77,11 @@ export function useInfiniteVideos({
       const isOffsetParam = typeof pageParam === 'object' && pageParam !== null && 'offset' in pageParam;
       const offset = isOffsetParam ? (pageParam as { offset: number }).offset : 0;
       const cursor = !isOffsetParam ? (pageParam as number | undefined) : undefined;
+
+      // Check sessionStorage cache before building filter
+      const cacheKey = `feed:${feedType}:${hashtag || ''}:${pubkey || ''}:cursor:${pageParam}`;
+      const cached = getCachedPageData(cacheKey);
+      if (cached) return cached;
 
       // Build filter based on feed type
       const filter: NIP50Filter = {
@@ -280,10 +291,12 @@ export function useInfiniteVideos({
         const nextCursor = pageVideos.length > 0
           ? pageVideos[pageVideos.length - 1].createdAt - 1
           : undefined;
-        return {
+        const result: VideoPage = {
           videos: pageVideos,
           nextCursor
         };
+        cachePageData(cacheKey, result);
+        return result;
       }
     },
     getNextPageParam: (lastPage) => {
@@ -298,4 +311,22 @@ export function useInfiniteVideos({
     staleTime: 60000, // 1 minute
     gcTime: 600000, // 10 minutes
   });
+
+  // Prefetch N+2 page
+  useEffect(() => {
+    const { data, fetchNextPage, hasNextPage, isFetching } = queryResult;
+    if (!hasNextPage || isFetching || !data?.pages.length) return;
+
+    let timeoutId = setTimeout(() => {
+      const lastPage = data.pages[data.pages.length - 1];
+      const nextCursor = lastPage.offset !== undefined ? { offset: lastPage.offset } : lastPage.nextCursor;
+      if (nextCursor !== undefined) {
+        fetchNextPage().catch(() => {});
+      }
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [queryResult.data, queryResult.hasNextPage, queryResult.isFetching, queryResult.fetchNextPage]);
+
+  return queryResult;
 }

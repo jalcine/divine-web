@@ -4,6 +4,7 @@
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 import { eventCache } from './eventCache';
 import { debugLog } from './debug';
+import { relayMetrics } from './relayMetrics';
 
 interface NostrClient {
   query: (filters: NostrFilter[], opts?: { signal?: AbortSignal; relays?: string[] }) => Promise<NostrEvent[]>;
@@ -46,7 +47,15 @@ export function createCachedNostr<T extends NostrClient>(
 
     // 2. Query via WebSocket
     const _wsStart = performance.now();
-    const results = await baseNostr.query(filters, opts);
+    let results: NostrEvent[];
+    try {
+      results = await baseNostr.query(filters, opts);
+      relayMetrics.recordLatency('wss://relay.divine.video', performance.now() - startTime);
+      relayMetrics.recordEventCount('wss://relay.divine.video', results.length);
+    } catch (err) {
+      relayMetrics.recordFailure('wss://relay.divine.video');
+      throw err;
+    }
     // debugLog(`[CachedNostr] WebSocket returned ${results.length} events in ${(performance.now() - _wsStart).toFixed(0)}ms`);
 
     // Cache the results if cacheable
