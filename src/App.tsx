@@ -25,20 +25,20 @@ import { FullscreenFeedProvider } from '@/contexts/FullscreenFeedContext';
 import AppRouter from './AppRouter';
 import { PRIMARY_RELAY, PRESET_RELAYS, toLegacyFormat } from '@/config/relays';
 
-const head = createHead({
-  plugins: [
-    InferSeoMetaPlugin(),
-  ],
-});
-
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       refetchOnWindowFocus: false,
-      staleTime: 60000, // 1 minute
-      gcTime: 300000, // 5 minutes - don't cache forever, allows recovery from failed queries
+      staleTime: 15000, // 15 seconds
+      gcTime: 120000, // 2 minutes
     },
   },
+});
+
+const head = createHead({
+  plugins: [
+    InferSeoMetaPlugin(),
+  ],
 });
 
 const defaultConfig: AppConfig = {
