@@ -213,6 +213,27 @@ export function useUnmuteItem() {
 }
 
 /**
+ * Map ContentFilterReason to NIP-56 report type string for e/p tag 3rd element.
+ * @see https://github.com/nostr-protocol/nips/blob/master/56.md
+ */
+function mapReasonToNip56(reason: ContentFilterReason): string {
+  const map: Record<ContentFilterReason, string> = {
+    [ContentFilterReason.SPAM]: 'spam',
+    [ContentFilterReason.HARASSMENT]: 'profanity',
+    [ContentFilterReason.VIOLENCE]: 'illegal',
+    [ContentFilterReason.SEXUAL_CONTENT]: 'nudity',
+    [ContentFilterReason.COPYRIGHT]: 'other',
+    [ContentFilterReason.FALSE_INFO]: 'other',
+    [ContentFilterReason.CSAM]: 'illegal',
+    [ContentFilterReason.AI_GENERATED]: 'other',
+    [ContentFilterReason.IMPERSONATION]: 'impersonation',
+    [ContentFilterReason.ILLEGAL]: 'illegal',
+    [ContentFilterReason.OTHER]: 'other',
+  };
+  return map[reason];
+}
+
+/**
  * Hook to report content (NIP-56)
  */
 export function useReportContent() {
@@ -240,15 +261,18 @@ export function useReportContent() {
 
       const tags: string[][] = [];
 
+      // NIP-56 compliance: e/p tag 3rd element must use standard types
+      const nip56Reason = mapReasonToNip56(reason);
+
       // Add reported event or pubkey
       if (eventId) {
-        tags.push(['e', eventId, reason]);
+        tags.push(['e', eventId, nip56Reason]);
       }
       if (pubkey) {
-        tags.push(['p', pubkey, reason]);
+        tags.push(['p', pubkey, nip56Reason]);
       }
 
-      // Add label namespace (NIP-32)
+      // Add label namespace (NIP-32) - keeps app-level reason for specificity
       tags.push(['L', 'social.nos.ontology']);
       tags.push(['l', `NS-${reason}`, 'social.nos.ontology']);
 
